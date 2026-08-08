@@ -589,14 +589,11 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                         from arkana.dashboard.app import create_dashboard_app
                         from contextlib import asynccontextmanager
                         from typing import AsyncIterator
-
                         dashboard_app = create_dashboard_app()
-                        
                         @asynccontextmanager
                         async def lifespan(app: Starlette) -> AsyncIterator[None]:
                             async with mcp_server.session_manager.run():
                                 yield
-                        
                         combined = Starlette(
                             routes=[
                                 Mount("/dashboard", app=dashboard_app),
