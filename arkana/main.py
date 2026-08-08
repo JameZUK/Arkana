@@ -562,12 +562,19 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
             try:
                 import uvicorn
                 from arkana.auth import BearerAuthMiddleware
-                from mcp.server.transport_security import TransportSecuritySettings
-                
-                security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
                 if args.mcp_transport == "streamable-http":
-                    mcp_app = mcp_server.streamable_http_app(transport_security=security)
+                    mcp_app = mcp_server.streamable_http_app()
+                    
+                    try:
+                        from mcp.server.transport_security import TransportSecurityMiddleware
+                        mcp_app.user_middleware = [
+                            m for m in mcp_app.user_middleware 
+                            if getattr(m, "cls", None) is not TransportSecurityMiddleware
+                        ]
+                    except ImportError:
+                        pass  # Fallback for very old SDK versions
+                    # -------------------------------------------------------------------
                 else:
                     mcp_app = mcp_server.sse_app()
 
