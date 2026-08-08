@@ -385,9 +385,6 @@ community_count = sum(1 for _ in target_community.rglob("*.yar")) + sum(1 for _ 
 print(f"  Yara-Rules Community rules installed: {community_count} files")
 PYEOF
 
-# --- Upgrade MCP SDK to latest version (fixes transport_security argument) ---
-RUN pip install --no-cache-dir --upgrade "mcp[cli]"
-
 # --- Copy Application Files ---
 COPY arkana.py .
 COPY arkana/ ./arkana/
