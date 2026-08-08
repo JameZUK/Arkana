@@ -562,12 +562,19 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
             try:
                 import uvicorn
                 from arkana.auth import BearerAuthMiddleware
-                from mcp.server.transport_security import TransportSecuritySettings
-
-                security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+                # Import the official security settings class
+                try:
+                    from mcp.server.transport_security import TransportSecuritySettings
+                    # Disable DNS rebinding protection to allow connections from your LAN/Docker network
+                    security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+                except ImportError:
+                    security = None
 
                 if args.mcp_transport == "streamable-http":
-                    mcp_app = mcp_server.streamable_http_app(transport_security=security)
+                    if security is not None:
+                        mcp_app = mcp_server.streamable_http_app(transport_security=security)
+                    else:
+                        mcp_app = mcp_server.streamable_http_app()
                 else:
                     mcp_app = mcp_server.sse_app()
 
