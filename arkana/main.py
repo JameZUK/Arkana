@@ -7,8 +7,6 @@ import logging
 import threading
 import time
 import argparse
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 # Enable faulthandler early so that segfaults, stuck threads, and deadlocks
 # are diagnosable.  ``faulthandler.enable()`` dumps tracebacks to stderr on
@@ -579,6 +577,8 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                         from starlette.applications import Starlette
                         from starlette.routing import Mount
                         from arkana.dashboard.app import create_dashboard_app
+                        from contextlib import asynccontextmanager
+                        from typing import AsyncIterator
 
                         dashboard_app = create_dashboard_app()
                         
