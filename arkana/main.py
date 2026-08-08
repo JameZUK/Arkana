@@ -597,7 +597,7 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                         from arkana.dashboard.app import _ensure_token
                         token = _ensure_token()
                         logger.info(
-                            "Dashboard: http://%s:%d/dashboard/?token=%s",
+                            "Snorington - Dashboard: http://%s:%d/dashboard/?token=%s",
                             args.mcp_host, args.mcp_port, token[:8] + "...",
                         )
                         app = combined
