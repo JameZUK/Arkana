@@ -572,7 +572,7 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                             "192.168.0.*:8082"
                         ],
                         allowed_origins=[
-                            "http://192.168.0.8:8082"
+                            "http://192.168.0.*:8082"
                         ],
                     )
                 except ImportError:
