@@ -48,7 +48,7 @@ requests>=2.28
 
 # --- Server Infrastructure ---
 # Model Context Protocol SDK
-mcp[cli] >=1.0
+mcp[cli] >=1.0,<2.0
 
 # Template engine (for dashboard)
 Jinja2>=3.1
