@@ -567,13 +567,7 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                     from mcp.server.transport_security import TransportSecuritySettings
                     # Disable DNS rebinding protection to allow connections from your LAN/Docker network
                     security = TransportSecuritySettings(
-                        enable_dns_rebinding_protection=True,
-                        allowed_hosts=[
-                            "192.168.0.*:8082"
-                        ],
-                        allowed_origins=[
-                            "http://192.168.0.*:8082"
-                        ],
+                        enable_dns_rebinding_protection=False,
                     )
                 except ImportError:
                     security = None
