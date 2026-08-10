@@ -16,6 +16,7 @@ from arkana.state import get_session_key_from_context, activate_session_state, g
 from arkana.utils import _safe_env_int
 from arkana.warning_handler import _current_tool_var
 from arkana.mcp._input_helpers import _ToolResultCache
+from mcp.server.transport_security import TransportSecuritySettings
 
 # Soft character limit — primary truncation threshold.
 # Claude Code CLI truncates MCP responses at character thresholds far below 64KB,
@@ -24,7 +25,13 @@ from arkana.mcp._input_helpers import _ToolResultCache
 _SOFT_LIMIT = _safe_env_int("ARKANA_MCP_RESPONSE_LIMIT_CHARS", MCP_SOFT_RESPONSE_LIMIT_CHARS, min_val=1000)
 
 # --- MCP Server Setup ---
-mcp_server = FastMCP("Arkana")
+mcp_server = FastMCP(
+    name="Arkana",
+    # whatever other arguments Arkana already has...
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
+)
 _raw_tool_decorator = mcp_server.tool()
 
 # --- Brief descriptions mode ---
