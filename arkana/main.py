@@ -563,11 +563,9 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                 import uvicorn
                 from arkana.auth import BearerAuthMiddleware
                 from mcp.server.transport_security import TransportSecuritySettings
-                
                 transport_security = TransportSecuritySettings(
                     enable_dns_rebinding_protection=False,
                 )
-                
                 if args.mcp_transport == "streamable-http":
                     mcp_app = mcp_server.streamable_http_app(
                         transport_security=transport_security,
