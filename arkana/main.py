@@ -562,10 +562,20 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
             try:
                 import uvicorn
                 from arkana.auth import BearerAuthMiddleware
+                from mcp.server.transport_security import TransportSecuritySettings
+                
+                transport_security = TransportSecuritySettings(
+                    enable_dns_rebinding_protection=False,
+                )
+                
                 if args.mcp_transport == "streamable-http":
-                    mcp_app = mcp_server.streamable_http_app()
+                    mcp_app = mcp_server.streamable_http_app(
+                        transport_security=transport_security,
+                    )
                 else:
-                    mcp_app = mcp_server.sse_app()
+                    mcp_app = mcp_server.sse_app(
+                        transport_security=transport_security,
+                    )
                 if api_key:
                     mcp_app = BearerAuthMiddleware(mcp_app, api_key)
                 # Mount dashboard alongside MCP in HTTP mode
