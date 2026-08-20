@@ -1851,37 +1851,83 @@ def activate_session_state(session_key: str) -> AnalyzerState:
     return s
 
 
+# MCP SDK v2 constructs a fresh ``ServerSession`` for every request, so the
+# object's identity cannot key a session — a marker written on one call is
+# gone by the next, and every tool call would land in its own AnalyzerState
+# ("No file is currently loaded" immediately after a successful open_file).
+# SDK v1 keeps one ServerSession per connected client, where stamping is both
+# valid and the only option: v1 exposes no transport session id to the tool.
+#
+# Probed locally rather than imported from ``arkana.imports`` so this module
+# stays free of the heavy optional-dependency graph.
+try:
+    import mcp.server.mcpserver as _mcp_v2_probe  # noqa: F401
+    _SESSION_OBJECT_PER_REQUEST = True
+except Exception:
+    _SESSION_OBJECT_PER_REQUEST = False
+
+
+def _transport_session_id(ctx) -> Optional[str]:
+    """Return the transport-level MCP session id, when the SDK exposes one.
+
+    Streamable-HTTP assigns each client a stable ``Mcp-Session-Id`` for the
+    life of the session; SDK v2 surfaces it on ``ctx.headers``.  Access is
+    guarded because ``headers`` is not always a mapping — it is a plain
+    ``str`` on SDK v1 stdio and ``None`` on both SDK v1 HTTP and v2 stdio.
+    """
+    headers = getattr(ctx, "headers", None)
+    getter = getattr(headers, "get", None)
+    if not callable(getter):
+        return None
+    for key in ("mcp-session-id", "Mcp-Session-Id"):
+        try:
+            value = getter(key)
+        except Exception:
+            continue
+        if value:
+            return str(value)
+    return None
+
+
 def get_session_key_from_context(ctx) -> str:
     """Extract a unique session key from an MCP ``Context`` object.
 
-    Falls back to ``"default"`` when no session can be identified (e.g.
-    stdio mode), which transparently collapses to the singleton model.
+    Resolution order:
 
-    Uses a UUID stamped onto the session object (``_arkana_session_id``)
-    rather than ``id(session)``, because Python can reuse ``id()`` values
-    after an object is garbage-collected, which could cause a new session
-    to inherit another session's state.
+    1. The transport-level MCP session id (``Mcp-Session-Id``). Stable across
+       calls, and the only correct key on SDK v2, whose ``ServerSession`` is
+       rebuilt per request.
+    2. A UUID stamped onto the session object — used only where the SDK keeps
+       one ``ServerSession`` per client (v1). A UUID is used rather than
+       ``id(session)`` because CPython reuses ``id()`` values after garbage
+       collection, which could let a new session inherit another's state.
+    3. ``"default"``, which transparently collapses to the singleton model.
+       This is the right answer for single-session transports (stdio).
     """
     try:
-        # FastMCP Context wraps a RequestContext
-        session = None
-        if hasattr(ctx, '_request_context'):
-            session = getattr(ctx._request_context, 'session', None)
-        if session is None and hasattr(ctx, 'session'):
-            session = ctx.session
-        if session is not None:
-            sid = getattr(session, '_arkana_session_id', None)
-            if sid is None:
-                sid = str(uuid.uuid4())
-                try:
-                    session._arkana_session_id = sid
-                except AttributeError:
-                    # Frozen/slotted objects — use stable UUID via WeakKeyDictionary
-                    with _session_id_map_lock:
-                        if session not in _session_id_map:
-                            _session_id_map[session] = f"id-{uuid.uuid4().hex[:16]}"
-                        sid = _session_id_map[session]
-            return sid
+        sid = _transport_session_id(ctx)
+        if sid:
+            return f"mcp-{sid}"
+
+        if not _SESSION_OBJECT_PER_REQUEST:
+            session = None
+            if hasattr(ctx, '_request_context'):
+                session = getattr(ctx._request_context, 'session', None)
+            if session is None and hasattr(ctx, 'session'):
+                session = ctx.session
+            if session is not None:
+                sid = getattr(session, '_arkana_session_id', None)
+                if sid is None:
+                    sid = str(uuid.uuid4())
+                    try:
+                        session._arkana_session_id = sid
+                    except AttributeError:
+                        # Frozen/slotted objects — use stable UUID via WeakKeyDictionary
+                        with _session_id_map_lock:
+                            if session not in _session_id_map:
+                                _session_id_map[session] = f"id-{uuid.uuid4().hex[:16]}"
+                            sid = _session_id_map[session]
+                return sid
     except Exception:
         # L: Elevated to WARNING — falling back to "default" in HTTP mode causes
         # all clients to share state, which is a session isolation failure.

@@ -13,6 +13,7 @@ import types
 
 from arkana import imports as arkana_imports
 from arkana import main as arkana_main
+from arkana import state as arkana_state
 
 
 # ---------------------------------------------------------------------------
@@ -229,3 +230,122 @@ class TestMountedLifespan:
         app = server.streamable_http_app()
         ctx = getattr(getattr(app, "router", None), "lifespan_context", None)
         assert ctx is not None and callable(ctx)
+
+
+# ---------------------------------------------------------------------------
+#  Session-key resolution — SDK v2 rebuilds ServerSession per request
+# ---------------------------------------------------------------------------
+
+class _Headers(dict):
+    """Mapping-style headers, as SDK v2 exposes over streamable-http."""
+
+
+class _Ctx:
+    """Stand-in for an MCP Context with configurable headers/session."""
+
+    def __init__(self, headers=None, session=None):
+        if headers is not None:
+            self.headers = headers
+        if session is not None:
+            self.session = session
+
+
+class _Session:
+    """Stand-in for a ServerSession (stampable, like SDK v1's)."""
+
+
+class TestTransportSessionId:
+    def test_reads_mcp_session_id_from_mapping(self):
+        ctx = _Ctx(headers=_Headers({"mcp-session-id": "abc123"}))
+        assert arkana_state._transport_session_id(ctx) == "abc123"
+
+    def test_accepts_canonical_capitalisation(self):
+        ctx = _Ctx(headers=_Headers({"Mcp-Session-Id": "abc123"}))
+        assert arkana_state._transport_session_id(ctx) == "abc123"
+
+    def test_string_headers_do_not_crash(self):
+        """SDK v1 stdio exposes ctx.headers as a plain str, which has no .get."""
+        ctx = _Ctx(headers="some-header-blob")
+        assert arkana_state._transport_session_id(ctx) is None
+
+    def test_none_headers(self):
+        """SDK v1 HTTP and SDK v2 stdio both expose headers as None."""
+        assert arkana_state._transport_session_id(_Ctx(headers=None)) is None
+
+    def test_absent_headers_attribute(self):
+        assert arkana_state._transport_session_id(_Ctx()) is None
+
+    def test_mapping_without_the_key(self):
+        ctx = _Ctx(headers=_Headers({"authorization": "Bearer x"}))
+        assert arkana_state._transport_session_id(ctx) is None
+
+    def test_raising_getter_is_swallowed(self):
+        class Hostile:
+            def get(self, _key):
+                raise RuntimeError("boom")
+
+        assert arkana_state._transport_session_id(_Ctx(headers=Hostile())) is None
+
+
+class TestSessionKeyFromContext:
+    def test_header_id_is_stable_across_distinct_contexts(self):
+        """The actual v2 bug: a new Context+ServerSession arrives per call.
+
+        Keying on the transport session id must yield the same AnalyzerState
+        for both, otherwise open_file() is immediately followed by
+        "No file is currently loaded".
+        """
+        h = _Headers({"mcp-session-id": "sess-1"})
+        k1 = arkana_state.get_session_key_from_context(_Ctx(headers=h, session=_Session()))
+        k2 = arkana_state.get_session_key_from_context(_Ctx(headers=h, session=_Session()))
+        assert k1 == k2 == "mcp-sess-1"
+
+    def test_distinct_sessions_get_distinct_keys(self):
+        """Isolation: two clients must not collide."""
+        a = arkana_state.get_session_key_from_context(
+            _Ctx(headers=_Headers({"mcp-session-id": "sess-a"})))
+        b = arkana_state.get_session_key_from_context(
+            _Ctx(headers=_Headers({"mcp-session-id": "sess-b"})))
+        assert a != b
+
+    def test_header_wins_over_session_object(self):
+        sess = _Session()
+        sess._arkana_session_id = "stamped-value"
+        key = arkana_state.get_session_key_from_context(
+            _Ctx(headers=_Headers({"mcp-session-id": "sess-1"}), session=sess))
+        assert key == "mcp-sess-1"
+
+    def test_v2_without_header_collapses_to_default(self, monkeypatch):
+        """SDK v2 stdio: no header, and the session object churns per call.
+
+        Stamping it would hand every call a fresh UUID -- and therefore a
+        fresh AnalyzerState -- so the single-session default is correct.
+        """
+        monkeypatch.setattr(arkana_state, "_SESSION_OBJECT_PER_REQUEST", True)
+        k1 = arkana_state.get_session_key_from_context(_Ctx(session=_Session()))
+        k2 = arkana_state.get_session_key_from_context(_Ctx(session=_Session()))
+        assert k1 == k2 == "default"
+
+    def test_v1_stamps_the_session_object(self, monkeypatch):
+        """SDK v1 exposes no transport id, so object stamping is the only key."""
+        monkeypatch.setattr(arkana_state, "_SESSION_OBJECT_PER_REQUEST", False)
+        sess = _Session()
+        k1 = arkana_state.get_session_key_from_context(_Ctx(session=sess))
+        k2 = arkana_state.get_session_key_from_context(_Ctx(session=sess))
+        assert k1 == k2
+        assert k1 != "default"
+
+    def test_v1_distinct_session_objects_are_isolated(self, monkeypatch):
+        monkeypatch.setattr(arkana_state, "_SESSION_OBJECT_PER_REQUEST", False)
+        a = arkana_state.get_session_key_from_context(_Ctx(session=_Session()))
+        b = arkana_state.get_session_key_from_context(_Ctx(session=_Session()))
+        assert a != b
+
+    def test_no_context_information_is_default(self):
+        assert arkana_state.get_session_key_from_context(object()) == "default"
+        assert arkana_state.get_session_key_from_context(None) == "default"
+
+    def test_probe_matches_installed_sdk(self):
+        """The churn probe must agree with the SDK generation in use."""
+        expected = arkana_imports.MCP_SDK_MAJOR >= 2
+        assert arkana_state._SESSION_OBJECT_PER_REQUEST is expected
