@@ -367,9 +367,44 @@ class AnalyzerState:
         with self._task_lock:
             return self._task_cancel_events.get(task_id)
 
+    def _active_project_storage_dirs(self) -> "List[Any]":
+        """Directories the active project owns that tools may legitimately read.
+
+        ``open_file()`` adopts every binary into
+        ``~/.arkana/projects/{id}/binaries/`` and rewrites ``state.filepath``
+        to that copy, and ``_write_output_and_register_artifact`` adopts tool
+        output into ``artifacts/``. Neither location is something a user would
+        think to pass to ``--allowed-paths``, so without this any tool that
+        re-reads its own loaded file (``_get_filepath``) fails with "Access
+        denied" in HTTP mode, where ``--allowed-paths`` is mandatory.
+
+        Scoped to the *active* project on purpose. Widening this to the whole
+        projects tree would let one session read a binary another session had
+        adopted, just by guessing the path — the allowlist is per-session
+        state, so it must not become a shared read channel. ``overlay/`` and
+        ``manifest.json`` are excluded too: no tool reads them by path, and
+        they hold user notes rather than sample data.
+
+        Returns ``[]`` for a ScratchProject (in-memory, no disk presence) or
+        when no project is bound.
+        """
+        from pathlib import Path
+        project = self.get_active_project()
+        if project is None:
+            return []
+        dirs = []
+        for attr in ("binaries_dir", "artifacts_dir"):
+            candidate = getattr(project, attr, None)
+            if candidate is None:
+                continue
+            try:
+                dirs.append(Path(os.path.realpath(str(candidate))))
+            except (OSError, ValueError):
+                continue
+        return dirs
+
     def check_path_allowed(self, file_path: str) -> None:
         """Raise RuntimeError if the path is outside all allowed directories."""
-        import os
         from pathlib import Path
         if self.allowed_paths is None:
             return  # No restriction configured
@@ -378,6 +413,12 @@ class AnalyzerState:
             allowed_resolved = Path(os.path.realpath(allowed))
             # Allow if the file is exactly the allowed path or inside it
             if resolved == allowed_resolved or resolved.is_relative_to(allowed_resolved):
+                return
+        # Arkana's own storage for the active project. These files got there
+        # only by Arkana copying an already-authorised input, so permitting
+        # them grants no reach the caller did not already have.
+        for project_dir in self._active_project_storage_dirs():
+            if resolved == project_dir or resolved.is_relative_to(project_dir):
                 return
         # M-S6: Don't disclose the attempted path — it confirms path existence
         raise RuntimeError(
