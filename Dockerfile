@@ -59,7 +59,7 @@ RUN pip install --no-cache-dir \
     stringsifter \
     joblib \
     numpy \
-    "mcp[cli]" \
+    "mcp[cli]>=2.0,<3.0" \
     Jinja2 \
     rapidfuzz \
     networkx \

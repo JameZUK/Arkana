@@ -118,7 +118,7 @@ pip install -r requirements.txt
 For basic PE analysis without heavy dependencies:
 
 ```bash
-pip install pefile networkx "mcp[cli]"
+pip install pefile networkx "mcp[cli]>=2.0,<3.0"
 ```
 
 Optional packages can be added individually:

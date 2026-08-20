@@ -18,8 +18,13 @@ from arkana.mcp.server import tool_decorator, _check_mcp_response_size
 
 try:
     from arkana.config import Context, logger
-except ImportError:
-    from mcp.server.fastmcp import Context
+except ImportError:  # pragma: no cover - standalone import fallback
+    # Mirror arkana.imports: SDK v2 renamed FastMCP -> MCPServer and moved
+    # the module, taking Context with it.  Try v2 first, then v1.
+    try:
+        from mcp.server.mcpserver import Context
+    except ImportError:
+        from mcp.server.fastmcp import Context
     logger = logging.getLogger("Arkana")
 
 # ---------------------------------------------------------------------------

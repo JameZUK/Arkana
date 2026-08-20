@@ -22,7 +22,7 @@ __all__ = [
     "FLOSS_AVAILABLE", "FLOSS_SETUP_OK", "FLOSS_ANALYSIS_OK",
     "FLOSS_IMPORT_ERROR_SETUP", "FLOSS_IMPORT_ERROR_ANALYSIS",
     "STRINGSIFTER_AVAILABLE", "STRINGSIFTER_IMPORT_ERROR",
-    "MCP_SDK_AVAILABLE",
+    "MCP_SDK_AVAILABLE", "MCP_SDK_MAJOR", "MCP_SDK_VERSION", "MCP_SDK_IMPORT_ERROR",
     "ANGR_AVAILABLE",
     "LIEF_AVAILABLE", "CAPSTONE_AVAILABLE", "KEYSTONE_AVAILABLE",
     "SPEAKEASY_AVAILABLE", "SPEAKEASY_IMPORT_ERROR",
@@ -278,22 +278,78 @@ except ImportError as e:
     STRINGSIFTER_AVAILABLE = False
     STRINGSIFTER_IMPORT_ERROR = str(e)
 
+# --- MCP SDK (v2 preferred, v1 supported) ---
+#
+# The SDK renamed and relocated its high-level server class in v2.0:
+#   v1:  mcp.server.fastmcp.FastMCP
+#   v2:  mcp.server.mcpserver.MCPServer   (mcp.server.fastmcp removed entirely)
+#
+# Both classes expose the same surface Arkana relies on -- ``tool()``,
+# ``run()``, ``sse_app()``, ``streamable_http_app()`` and a ``Context``
+# that is auto-injected into tool signatures -- so a single alias covers
+# both.  The name ``FastMCP`` is kept as the internal alias so the rest of
+# the codebase (and the ``config.py`` re-export hub) is version-agnostic.
+#
+# The one genuine divergence is ``settings``: v1 carried ``host``/``port``
+# on the settings object, v2 moved them to the app-factory / runner
+# keyword arguments.  ``arkana.main._configure_mcp_transport`` handles that
+# difference; nothing else in the codebase touches ``settings``.
 MCP_SDK_AVAILABLE = False
+MCP_SDK_MAJOR = 0
+MCP_SDK_VERSION = None
+MCP_SDK_IMPORT_ERROR = None
 try:
-    from mcp.server.fastmcp import FastMCP, Context  # noqa: F401
+    from mcp.server.mcpserver import MCPServer as FastMCP, Context  # noqa: F401
     MCP_SDK_AVAILABLE = True
-except ImportError:
-    class MockSettings: host = "127.0.0.1"; port = 8081; log_level = "INFO"
-    class MockMCP:
-        def __init__(self, name, description=""): self.name = name; self.description = description; self.app = object(); self.settings = MockSettings(); self._run_called_with_transport = None
-        def tool(self): decorator = lambda func: func; return decorator
-        def run(self, transport: str = "stdio"): raise NotImplementedError("MCP SDK is not installed. Install with: pip install 'mcp[cli]'")
-    FastMCP = MockMCP  # type: ignore
-    class Context:  # type: ignore
-        async def info(self, msg): print(f"(mock ctx info): {msg}")
-        async def error(self, msg): print(f"(mock ctx error): {msg}")
-        async def warning(self, msg): print(f"(mock ctx warning): {msg}")
-        async def report_progress(self, current, total): pass
+    MCP_SDK_MAJOR = 2
+except ImportError as _mcp_v2_err:
+    try:
+        from mcp.server.fastmcp import FastMCP, Context  # noqa: F401
+        MCP_SDK_AVAILABLE = True
+        MCP_SDK_MAJOR = 1
+    except ImportError as _mcp_v1_err:
+        # Distinguish "SDK missing" from "SDK present but neither entry
+        # point resolves".  The latter means a future major version moved
+        # the class again -- telling the user to reinstall 'mcp[cli]' (as
+        # this branch used to) sends them in circles, because the package
+        # *is* installed.
+        try:
+            import importlib.metadata as _md
+            MCP_SDK_VERSION = _md.version("mcp")
+        except Exception:
+            MCP_SDK_VERSION = None
+        if MCP_SDK_VERSION is None:
+            MCP_SDK_IMPORT_ERROR = (
+                "The MCP SDK is not installed. Install it with: "
+                "pip install 'mcp[cli]>=2.0'"
+            )
+        else:
+            MCP_SDK_IMPORT_ERROR = (
+                f"The MCP SDK is installed (version {MCP_SDK_VERSION}) but neither "
+                f"'mcp.server.mcpserver.MCPServer' (v2) nor 'mcp.server.fastmcp.FastMCP' "
+                f"(v1) could be imported, so this release is not supported yet. "
+                f"Pin a known-good version with: pip install 'mcp[cli]>=2.0,<3.0'. "
+                f"(v2 import error: {_mcp_v2_err}; v1 import error: {_mcp_v1_err})"
+            )
+
+        class MockSettings: host = "127.0.0.1"; port = 8081; log_level = "INFO"
+        class MockMCP:
+            def __init__(self, name, description=""): self.name = name; self.description = description; self.app = object(); self.settings = MockSettings(); self._run_called_with_transport = None
+            def tool(self): decorator = lambda func: func; return decorator
+            def run(self, transport: str = "stdio", **kwargs): raise NotImplementedError(MCP_SDK_IMPORT_ERROR)
+        FastMCP = MockMCP  # type: ignore
+        class Context:  # type: ignore
+            async def info(self, msg): print(f"(mock ctx info): {msg}")
+            async def error(self, msg): print(f"(mock ctx error): {msg}")
+            async def warning(self, msg): print(f"(mock ctx warning): {msg}")
+            async def report_progress(self, current, total): pass
+
+if MCP_SDK_AVAILABLE and MCP_SDK_VERSION is None:
+    try:
+        import importlib.metadata as _md
+        MCP_SDK_VERSION = _md.version("mcp")
+    except Exception:
+        MCP_SDK_VERSION = None
 
 # --- Angr Integration ---
 ANGR_AVAILABLE = False
@@ -637,9 +693,12 @@ except ImportError:
 def log_library_availability():
     """Log availability of optional libraries. Called once from main()."""
     if MCP_SDK_AVAILABLE:
-        logger.info("MCP SDK found.")
+        logger.info(
+            "MCP SDK found (version %s, API v%d).",
+            MCP_SDK_VERSION or "unknown", MCP_SDK_MAJOR,
+        )
     else:
-        logger.warning("MCP SDK not found. MCP server functionality will be mocked or unavailable if critical.")
+        logger.warning("MCP SDK unusable. %s", MCP_SDK_IMPORT_ERROR)
     if CAPA_AVAILABLE:
         logger.info("Capa library found.")
     else:

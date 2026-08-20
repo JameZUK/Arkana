@@ -1,4 +1,5 @@
 """Main entry point: argument parsing, CLI mode, and MCP server startup."""
+import contextlib
 import faulthandler
 import os
 import sys
@@ -19,12 +20,13 @@ if hasattr(signal, "SIGUSR1"):
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from arkana.config import (
     state, logger, pefile,
     PEFILE_AVAILABLE,
-    ANGR_AVAILABLE, MCP_SDK_AVAILABLE, FLOSS_AVAILABLE, REFINERY_AVAILABLE,
+    ANGR_AVAILABLE, MCP_SDK_AVAILABLE, MCP_SDK_MAJOR, MCP_SDK_IMPORT_ERROR,
+    FLOSS_AVAILABLE, REFINERY_AVAILABLE,
     FLOSS_MIN_LENGTH_DEFAULT,
     Actual_DebugLevel_Floss, Actual_StringType_Floss,
     DEFAULT_PEID_DB_PATH, DATA_DIR, CAPA_RULES_DEFAULT_DIR_NAME,
@@ -431,10 +433,94 @@ def _preload_file(args: argparse.Namespace, cfg: _ResolvedConfig) -> None:
 #  Phase 6: MCP server startup
 # ---------------------------------------------------------------------------
 
+def _mounted_lifespan(*mounted_apps):
+    """Build a Starlette ``lifespan`` that also runs each mounted app's own.
+
+    Starlette dispatches lifespan events to the *top-level* application only;
+    apps attached with ``Mount`` never receive startup/shutdown.  The MCP
+    SDK's ``streamable_http_app()`` / ``sse_app()`` start their session
+    manager's anyio task group inside that lifespan, so mounting one under a
+    wrapper app without forwarding startup leaves the task group unstarted and
+    every MCP request fails with::
+
+        RuntimeError: Task group is not initialized. Make sure to use run().
+
+    Both SDK generations expose the context manager the same way
+    (``app.router.lifespan_context``), so no version branch is needed here.
+    Apps that expose no lifespan (the dashboard, currently) are skipped, and
+    listing them anyway keeps this correct if they later gain startup hooks.
+    """
+    @contextlib.asynccontextmanager
+    async def _lifespan(app):
+        async with contextlib.AsyncExitStack() as stack:
+            for mounted in mounted_apps:
+                if mounted is None:
+                    continue
+                ctx = getattr(getattr(mounted, "router", None), "lifespan_context", None)
+                if ctx is None:
+                    continue
+                await stack.enter_async_context(ctx(mounted))
+            yield
+
+    return _lifespan
+
+
+def _mcp_run_kwargs(host: str, port: int) -> Dict[str, Any]:
+    """Extra kwargs for ``mcp_server.run()`` on the HTTP fallback path.
+
+    SDK v1 read the bind address off ``mcp_server.settings`` and its
+    ``run()`` accepted only ``mount_path``.  SDK v2 dropped ``host``/``port``
+    from settings and instead forwards ``**kwargs`` from ``run()`` straight
+    into ``run_sse_async`` / ``run_streamable_http_async``.
+
+    Passing host/port to a v1 ``run()`` would raise ``TypeError``, so this
+    returns them only when running against v2.  On v1 the values are already
+    on ``settings`` courtesy of ``_apply_mcp_settings``.
+    """
+    if MCP_SDK_MAJOR >= 2:
+        return {"host": host, "port": port}
+    return {}
+
+
+def _apply_mcp_settings(mcp_server, host: str, port: int, log_level: int) -> None:
+    """Push host/port/log level onto the SDK's settings object where supported.
+
+    ``settings`` is a pydantic model in both SDK generations, and pydantic
+    raises ``ValueError`` on assignment to a field the model does not
+    declare.  v2 removed ``host`` and ``port`` (they became app-factory /
+    runner arguments), so each field is set only if the model declares it.
+
+    This is best-effort: Arkana composes its own Starlette app and calls
+    ``uvicorn.run(host=..., port=...)`` explicitly, so these settings only
+    matter for the ``mcp_server.run()`` fallback path and for the SDK's own
+    startup logging.
+    """
+    settings = getattr(mcp_server, "settings", None)
+    if settings is None:
+        return
+    declared = getattr(type(settings), "model_fields", None)
+    for name, value in (
+        ("host", host),
+        ("port", port),
+        ("log_level", logging.getLevelName(log_level).lower()),
+    ):
+        # ``model_fields`` is authoritative for pydantic settings objects;
+        # fall back to hasattr for the mock/non-pydantic case.
+        if declared is not None:
+            if name not in declared:
+                continue
+        elif not hasattr(settings, name):
+            continue
+        try:
+            setattr(settings, name, value)
+        except (ValueError, AttributeError, TypeError) as exc:
+            logger.debug("MCP settings field %r not assignable: %s", name, exc)
+
+
 def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level: int) -> None:
     """Configure and run the MCP server."""
     if not MCP_SDK_AVAILABLE:
-        logger.critical("MCP SDK ('modelcontextprotocol') not available. Cannot start MCP server. Please install it (e.g., 'pip install \"mcp[cli]\"') and re-run.")
+        logger.critical("Cannot start MCP server. %s", MCP_SDK_IMPORT_ERROR)
         sys.exit(1)
 
     # Resolve brief descriptions: CLI flag > env var > default off
@@ -511,9 +597,7 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
     dashboard_port = _safe_env_int("ARKANA_DASHBOARD_PORT", 8082)
 
     if args.mcp_transport in ("sse", "streamable-http"):
-        mcp_server.settings.host = args.mcp_host
-        mcp_server.settings.port = args.mcp_port
-        mcp_server.settings.log_level = logging.getLevelName(log_level).lower()
+        _apply_mcp_settings(mcp_server, args.mcp_host, args.mcp_port, log_level)
         transport_label = "streamable-http" if args.mcp_transport == "streamable-http" else "SSE (deprecated)"
         logger.info("Starting MCP server (%s) on http://%s:%d", transport_label, args.mcp_host, args.mcp_port)
     else:
@@ -564,10 +648,16 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                 from arkana.auth import BearerAuthMiddleware
 
                 if args.mcp_transport == "streamable-http":
-                    mcp_app = mcp_server.streamable_http_app()
+                    mcp_asgi = mcp_server.streamable_http_app()
                 else:
-                    mcp_app = mcp_server.sse_app()
+                    mcp_asgi = mcp_server.sse_app()
 
+                # Keep the unwrapped Starlette instance: its lifespan is what
+                # starts the MCP session manager, and BearerAuthMiddleware
+                # hides ``.router`` behind a plain ASGI callable.
+                mcp_starlette = mcp_asgi
+
+                mcp_app = mcp_asgi
                 if api_key:
                     mcp_app = BearerAuthMiddleware(mcp_app, api_key)
 
@@ -579,10 +669,13 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                         from arkana.dashboard.app import create_dashboard_app
 
                         dashboard_app = create_dashboard_app()
-                        combined = Starlette(routes=[
-                            Mount("/dashboard", app=dashboard_app),
-                            Mount("/", app=mcp_app),
-                        ])
+                        combined = Starlette(
+                            routes=[
+                                Mount("/dashboard", app=dashboard_app),
+                                Mount("/", app=mcp_app),
+                            ],
+                            lifespan=_mounted_lifespan(mcp_starlette, dashboard_app),
+                        )
                         from arkana.dashboard.app import _ensure_token
                         token = _ensure_token()
                         logger.info(
@@ -604,7 +697,10 @@ def _start_mcp_server(args: argparse.Namespace, cfg: _ResolvedConfig, log_level:
                 )
             except (ImportError, AttributeError) as e:
                 logger.warning("Could not start HTTP server (%s), falling back to basic mode", e)
-                mcp_server.run(transport=args.mcp_transport)
+                mcp_server.run(
+                    transport=args.mcp_transport,
+                    **_mcp_run_kwargs(args.mcp_host, args.mcp_port),
+                )
         else:
             mcp_server.run(transport=args.mcp_transport)
     except KeyboardInterrupt:

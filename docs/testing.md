@@ -80,7 +80,7 @@ pip install -r requirements-test.txt
 The core project dependencies are also required:
 
 ```bash
-pip install pefile networkx "mcp[cli]"
+pip install pefile networkx "mcp[cli]>=2.0,<3.0"
 ```
 
 #### Run all unit tests
@@ -400,7 +400,7 @@ pytest -m unit -v              # Only unit tests
 Install the core dependencies:
 
 ```bash
-pip install pefile networkx "mcp[cli]"
+pip install pefile networkx "mcp[cli]>=2.0,<3.0"
 ```
 
 ### Unit tests fail with `pyo3_runtime.PanicException` (cryptography)

@@ -47,8 +47,12 @@ cryptography>=43.0
 requests>=2.28
 
 # --- Server Infrastructure ---
-# Model Context Protocol SDK
-mcp[cli]>=1.0
+# Model Context Protocol SDK.
+# v2.0 removed mcp.server.fastmcp (FastMCP -> mcp.server.mcpserver.MCPServer);
+# arkana/imports.py supports both generations, but v2 is the target.
+# The <3.0 ceiling is deliberate: the v1 -> v2 bump moved the server class
+# without a deprecation shim, so an unbounded pin breaks builds on release day.
+mcp[cli]>=2.0,<3.0
 # Template engine (for dashboard)
 Jinja2>=3.1
 # ASGI framework (dashboard web app)

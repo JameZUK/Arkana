@@ -113,6 +113,19 @@ SAMPLE_FILE = os.environ.get("ARKANA_TEST_SAMPLE", "")
 # Session Management
 # ═══════════════════════════════════════════════════════════════════════════
 
+def _result_is_error(result) -> bool:
+    """Read the tool-call error flag across MCP SDK generations.
+
+    SDK v1 exposed the wire name ``isError``; v2 renamed the model attribute
+    to ``is_error`` (the camelCase alias is still accepted on construction,
+    but not on attribute access).
+    """
+    flag = getattr(result, "is_error", None)
+    if flag is None:
+        flag = getattr(result, "isError", None)
+    return bool(flag)
+
+
 def _extract_root_cause(exc: BaseException) -> str:
     """Dig into ExceptionGroup / BaseExceptionGroup to find the real error."""
     if hasattr(exc, "exceptions"):  # ExceptionGroup / BaseExceptionGroup
@@ -126,7 +139,10 @@ def _extract_root_cause(exc: BaseException) -> str:
 @asynccontextmanager
 async def _connect_streamable_http(url: str) -> AsyncGenerator[ClientSession, None]:
     """Open a streamable-http session."""
-    async with streamable_http_client(url) as (read_stream, write_stream, _):
+    # SDK v1 yields (read, write, get_session_id); v2 yields (read, write).
+    # Index rather than unpack so both shapes work.
+    async with streamable_http_client(url) as streams:
+        read_stream, write_stream = streams[0], streams[1]
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
             yield session
@@ -277,7 +293,7 @@ async def call_tool(
         f"{tool_name}: expected CallToolResult, got {type(result)}"
     )
 
-    if result.isError:
+    if _result_is_error(result):
         text = (
             result.content[0].text
             if result.content and hasattr(result.content[0], "text")
@@ -372,7 +388,7 @@ async def call_tool_expect_error(
     assert isinstance(result, mcp_types.CallToolResult)
 
     # If the tool returned successfully (no error flag), check the payload
-    if not result.isError:
+    if not _result_is_error(result):
         text = ""
         if result.content and hasattr(result.content[0], "text"):
             text = result.content[0].text
@@ -1745,7 +1761,7 @@ class TestAngrForensic:
                         "save_patched_binary",
                         arguments={"output_path": out_path},
                     )
-                    if result.isError:
+                    if _result_is_error(result):
                         text = (
                             result.content[0].text
                             if result.content and hasattr(result.content[0], "text")

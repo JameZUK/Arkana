@@ -10,7 +10,7 @@ networkx>=3.0
 PyYAML>=6.0
 
 # Server infrastructure (used by arkana.mcp.server at import time)
-mcp[cli]>=1.0
+mcp[cli]>=2.0,<3.0
 
 # Dashboard (used by arkana.dashboard)
 jinja2>=3.1
