@@ -99,6 +99,19 @@ docker run --rm -i \
 
 ---
 
+### Container health
+
+The image ships a `HEALTHCHECK` (`scripts/docker_healthcheck.py`). It treats
+**any HTTP response as healthy**, because `/mcp` sits behind bearer auth and
+HTTP transport always has a key  - one is auto-generated when `--api-key` is
+omitted  - so an unauthenticated probe legitimately receives 401. In stdio
+mode the dashboard owns the port and returns 404 for `/mcp`. Only a
+connection-level failure counts as unhealthy, and configurations that serve
+no HTTP at all (stdio with `--no-dashboard`, or `ARKANA_DASHBOARD_PORT=0`)
+report healthy rather than flapping red.
+
+---
+
 ## Option B: Local Installation
 
 Requires Python 3.10+ and cmake (for building Unicorn/Angr bindings).

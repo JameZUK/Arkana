@@ -171,6 +171,38 @@ its own isolated venv (see section 1).
 
 ---
 
+## 4b. ilspycmd version pin (.NET decompiler)
+
+`dotnet tool install ilspycmd` with no version resolves to the newest
+release, which targets a framework newer than the image's .NET 8 SDK. That
+fails the build step with:
+
+```
+The settings file in the tool's NuGet package is invalid:
+Settings file 'DotnetToolSettings.xml' was not found in the package.
+```
+
+The step is non-fatal, so builds succeeded with `dotnet_decompile()`
+silently unavailable. Testing candidates inside the image gives three
+distinct outcomes:
+
+| Version | Installs | Runs |
+|---------|----------|------|
+| 10.1.1.8388 | no  - SDK 8 cannot resolve the target framework | — |
+| **9.1.0.7988** | yes | yes  - targets net8.0, which the image ships |
+| 8.2.0.7535 | yes | **no**  - "You must install or update .NET to run this application" |
+
+The 8.x outcome is the dangerous one: `_check_ilspycmd_available()` only
+tests that the file exists, so an unrunnable binary would be advertised as
+available and every call would fail at runtime.
+
+The Dockerfile therefore pins `ARG ILSPYCMD_VERSION=9.1.0.7988` and follows
+the install with an `ilspycmd --version` check that removes the directory on
+failure, so detection can never report a tool that cannot execute. Revisit
+the pin when the dotnet base image is upgraded.
+
+---
+
 ## 5. stringsifter pins
 
 `stringsifter` pins `numpy<1.25`, `scikit-learn<1.4`, and
@@ -275,6 +307,7 @@ Arkana's imports.  These are handled with compatibility shims:
 | **angr** >=9.2.199 | `analyses.FlirtAnalysis()` | `analyses.Flirt()` | `tools_angr_disasm.py` | Direct rename + auto-load FLIRT sigs |
 | **unipacker** >=1.0.8 | `UnpackerEngine(filepath, ...)` | `UnpackerEngine(Sample(filepath), ...)` | `scripts/unipacker_runner.py` | Wrap path in `Sample()` object (in venv runner) |
 | **angr** >=9.2.199 | `ProcedureEngine()` (no args) | `ProcedureEngine(project)` | `tools_angr_dataflow.py` | Monkey-patch `VFG._get_simsuccessors` |
+| **mcp** >=2.0 | `mcp.server.fastmcp.FastMCP` | `mcp.server.mcpserver.MCPServer` | `imports.py`, `main.py`, `state.py` | Try v2, fall back to v1; alias kept as `FastMCP` |
 
 ### dncil: CilError → MethodBodyFormatError
 
@@ -290,6 +323,41 @@ angr v9.2.199 renamed the FLIRT analysis plugin.  Additionally, the new
 `angr.flirt.load_signatures(path)`, unlike the old `FlirtAnalysis()`
 which handled this internally.  Arkana auto-discovers FLIRT signature
 files from FLOSS's bundled sigs directory.
+
+### mcp: FastMCP to MCPServer (SDK v2)
+
+MCP SDK v2.0 removed `mcp.server.fastmcp` outright  - `FastMCP` became
+`mcp.server.mcpserver.MCPServer`, with no deprecation shim. Because the
+dependency was pinned as an unbounded `mcp[cli]>=1.0`, fresh builds
+resolved 2.0.0 on release day and stopped working.
+
+`arkana/imports.py` tries v2 first and falls back to v1, keeping the
+internal alias `FastMCP` so the rest of the codebase is version-agnostic.
+The pin is now `mcp[cli]>=2.0,<3.0`  - the upper bound is deliberate,
+since a major bump moved the server class once already.
+
+Three behavioural differences needed handling beyond the import:
+
+**`settings` lost `host`/`port`.** v1 carried the bind address on
+`mcp_server.settings`; v2 moved it to app-factory and runner keyword
+arguments, and its pydantic settings model raises `ValueError` on
+assignment to an undeclared field. `main._apply_mcp_settings()` assigns
+only fields the model declares, and `main._mcp_run_kwargs()` passes
+host/port to `run()` on v2 only  - v1's `run()` signature would raise
+`TypeError`.
+
+**`ServerSession` is rebuilt per request.** v1 kept one session object per
+connected client, so Arkana keyed its per-session `AnalyzerState` by
+stamping a UUID onto it. Under v2 the object differs on every call, so
+each tool call landed in a fresh state  - `open_file()` reported success
+and the next call answered "No file is currently loaded". Session identity
+now resolves in three tiers (see
+[Architecture → MCP session identity](architecture.md#mcp-session-identity)).
+
+**Client-side renames.** v2 renamed `isError` → `is_error` and
+`structuredContent` → `structured_content`, and the streamable-http
+transport yields a 2-tuple instead of a 3-tuple.
+`tests/integration/mcp_test_client.py` handles both shapes.
 
 ### unipacker: Sample object required
 

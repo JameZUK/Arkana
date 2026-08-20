@@ -1,6 +1,6 @@
 # Arkana Tool Reference
 
-Complete catalog of all 294 MCP tools organized by use case.
+Complete catalog of all 308 MCP tools organized by use case.
 Source files: `arkana/mcp/tools_*.py`
 
 > **Address format:** All address/offset parameters accept both hex (`0x401000`) and decimal (`4198400`). Hex strings with a `0x` prefix are auto-detected via `int(x, 0)`.

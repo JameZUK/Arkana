@@ -2,7 +2,7 @@
 
 ## What is Arkana?
 
-Arkana is a Model Context Protocol (MCP) server exposing 294 binary analysis tools to AI clients. It supports PE, ELF, and Mach-O formats with integrations for angr, capa, FLOSS, YARA, Binary Refinery, Qiling, Speakeasy, oletools, and GoReSym.
+Arkana is a Model Context Protocol (MCP) server exposing 308 binary analysis tools to AI clients. It supports PE, ELF, and Mach-O formats with integrations for angr, capa, FLOSS, YARA, Binary Refinery, Qiling, Speakeasy, oletools, and GoReSym.
 
 ## Project Structure
 
@@ -27,7 +27,7 @@ arkana/                  # Main package
 │   │   └── partials/   # htmx partials (_global_status, _overview_stats, _task_list, _timeline_entry)
 │   └── static/         # CSS (CRT theme), JS (htmx, Cytoscape.js, strings.js), logo
 ├── resource_monitor.py  # Process-level RSS/CPU monitoring (psutil daemon thread)
-    └── mcp/                # MCP tool modules (294 tools across 65 files)
+    └── mcp/                # MCP tool modules (308 tools across 67 files)
     ├── server.py       # MCP server instance, tool_decorator, response truncation
     ├── _*.py           # Private helpers (angr, input, format, progress, refinery, rename, search)
     └── tools_*.py      # Tool modules grouped by domain

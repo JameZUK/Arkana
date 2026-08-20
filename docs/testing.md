@@ -1,6 +1,6 @@
 # Testing Guide
 
-Arkana has two layers of testing: **unit tests** for fast, isolated verification of core modules, and **integration tests** for end-to-end validation of all 294 MCP tools against a running server. A **CI/CD pipeline** via GitHub Actions runs unit tests automatically on every push and pull request. The unit test suite currently includes 2853 passing tests across 20+ files.
+Arkana has two layers of testing: **unit tests** for fast, isolated verification of core modules, and **integration tests** for end-to-end validation of all 308 MCP tools against a running server. A **CI/CD pipeline** via GitHub Actions runs unit tests automatically on every push and pull request. The unit test suite currently includes 3125 passing tests across 20+ files.
 
 ---
 
@@ -67,7 +67,7 @@ pytest tests/ -v --cov=arkana --cov-report=term-missing --cov-config=.coveragerc
 
 ## Unit Tests
 
-Unit tests live in the `tests/` directory (2853 tests across 20+ files) and test individual functions and classes in isolation. They do **not** require a running MCP server, binary samples, or heavy optional dependencies like Angr, Capa, or FLOSS.
+Unit tests live in the `tests/` directory (3125 tests across 20+ files) and test individual functions and classes in isolation. They do **not** require a running MCP server, binary samples, or heavy optional dependencies like Angr, Capa, or FLOSS.
 
 ### Running Unit Tests
 
@@ -174,6 +174,9 @@ exclude_lines =
 | `test_truncation.py` | `arkana/mcp/server.py` | 14 | MCP response size checking and smart truncation logic for large lists, strings, dicts, and deeply nested structures |
 | `test_auth.py` | `arkana/auth.py` | 7 | Bearer token authentication middleware for ASGI with constant-time token comparison |
 | `test_debug.py` | `arkana/mcp/tools_debug.py` | 76 | Debug session lifecycle (creation, eviction, cleanup, auto-select), execution control (step, step_over, continue, run_until), breakpoints (address, API, conditional, max enforcement), watchpoints (read, write, size validation), inspection (registers, memory hex/disasm, write), snapshots (save, restore, list, diff, max enforcement), error handling (no file, Qiling unavailable, subprocess crash, timeout), session state updates, MCP tool integration (all 20 tools) |
+| `test_mcp_sdk_compat.py` | `arkana/imports.py`, `arkana/main.py`, `arkana/state.py` | 34 | MCP SDK v1/v2 compatibility: SDK detection and alias resolution, `_apply_mcp_settings` (v1 host/port vs v2 which dropped them), `_mcp_run_kwargs` per generation, `_mounted_lifespan` forwarding for mounted ASGI apps, and session-key resolution (transport `Mcp-Session-Id` stability across the per-request `ServerSession` v2 creates, non-mapping `ctx.headers`, isolation between distinct sessions) |
+| `test_path_allowlist_projects.py` | `arkana/state.py` | 14 | Path allowlist vs project storage: active project's `binaries/`/`artifacts/` reachable, project root and *other* projects denied, unbinding revokes access, scratch projects grant nothing, and symlink-escape rejection (a link planted in `binaries/` resolving outside the allowed set) |
+| `test_docker_healthcheck.py` | `scripts/docker_healthcheck.py` | 28 | Container healthcheck: any HTTP status (401/404/…) counts as alive, connection failure is unhealthy only when a listener is expected, transport/port parsing from `/proc/1/cmdline`, and the no-HTTP-surface case (stdio + `--no-dashboard`) |
 
 ### Writing New Unit Tests
 
@@ -223,7 +226,7 @@ When adding new unit tests, follow these conventions:
 
 ## Integration Tests
 
-The integration test suite (`mcp_test_client.py`) covers all **294 MCP tools** across 19 test categories. Tests connect to a running Arkana server over streamable-http (or SSE) and exercise every tool end-to-end. Tests gracefully skip when a tool is unavailable or a required library is not installed.
+The integration test suite (`mcp_test_client.py`) covers all **308 MCP tools** across 19 test categories. Tests connect to a running Arkana server over streamable-http (or SSE) and exercise every tool end-to-end. Tests gracefully skip when a tool is unavailable or a required library is not installed.
 
 ### Prerequisites
 
@@ -289,7 +292,7 @@ pytest mcp_test_client.py -v -k "TestPEData"          # All 25 get_pe_data keys
 pytest mcp_test_client.py -v -k "TestAngrCore"         # Core Angr tools
 pytest mcp_test_client.py -v -k "TestMultiFormat"       # ELF/Mach-O/Go/Rust/.NET
 pytest mcp_test_client.py -v -k "TestStringAnalysis"    # String analysis tools
-pytest mcp_test_client.py -v -k "TestToolDiscovery"     # Verify all 294 tools exist
+pytest mcp_test_client.py -v -k "TestToolDiscovery"     # Verify all 308 tools exist
 ```
 
 ### Environment Variables

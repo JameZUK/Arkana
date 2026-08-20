@@ -120,7 +120,7 @@ arkana/
 
 ## Design Principles
 
-- **Modular Package**  - Clean `arkana/` package structure with 65 MCP modules and separated concerns (parsers, MCP tools, CLI, configuration).
+- **Modular Package**  - Clean `arkana/` package structure with 67 MCP modules and separated concerns (parsers, MCP tools, CLI, configuration).
 - **Docker-First Design**  - No interactive prompts. Dependencies are managed via Docker, making it container and CI/CD ready.
 - **Single-File Analysis Context**  - The server holds one file in memory via `AnalyzerState`. All tools operate on this shared context. Use `open_file` and `close_file` to switch between files. Calling `open_file` on a new file without `close_file` is safe — all module-level caches (`_decompile_meta`, `_phase_caches`, dashboard caches, `result_cache`, analysis warnings) are cleared automatically to prevent cross-file data contamination.
 - **Thread-Safe State**  - Centralised `AnalyzerState` class with locking for concurrent access.
@@ -137,6 +137,57 @@ arkana/
 - **Rename/Annotation Layer**  - Users can rename functions and variables, and add address labels. Renames persist via cache alongside notes and are automatically applied in decompilation and disassembly output. Variable renames use a single-pass combined regex to prevent cascading substitutions. `batch_rename` supports bulk operations with two-pass validate-then-apply atomicity.
 - **Custom Types**  - User-defined structs and enums for parsing binary data. Field types reuse `parse_binary_struct` types. Persisted via cache with validation guards (field name regex, enum byte-size checks, duplicate detection, cycle detection for recursive structs).
 - **Artifacts**  - Tools that extract files (unpacking, payload carving, config extraction) register them via `state.register_artifact()` with path, hashes, source tool, and type detection. Artifacts persist via cache and are included in project export/import archives.
+
+---
+
+## MCP SDK Compatibility
+
+Arkana supports MCP SDK **v1 and v2**; `mcp[cli]>=2.0,<3.0` is the pinned
+target. `arkana/imports.py` tries `mcp.server.mcpserver.MCPServer` (v2) and
+falls back to `mcp.server.fastmcp.FastMCP` (v1), exporting `MCP_SDK_MAJOR`,
+`MCP_SDK_VERSION` and `MCP_SDK_IMPORT_ERROR`. The internal alias stays
+`FastMCP`, so tool modules are version-agnostic. When neither entry point
+resolves, the startup error names the installed version rather than telling
+you to install a package you already have. See
+[Dependencies → mcp: FastMCP to MCPServer](dependencies.md#mcp-fastmcp-to-mcpserver-sdk-v2)
+for the migration detail.
+
+### MCP session identity
+
+In HTTP mode each connected client gets its own `AnalyzerState`, keyed by a
+session identifier that `get_session_key_from_context()` resolves in three
+tiers:
+
+1. **`Mcp-Session-Id` from `ctx.headers`**  - stable for the life of a
+   streamable-http session, and the only correct key on SDK v2.
+2. **A UUID stamped on the `ServerSession` object**  - used only where the
+   SDK keeps one session per client (v1, which exposes no transport id).
+3. **`"default"`**  - the singleton collapse, correct for single-session
+   transports such as stdio.
+
+The ordering matters: **SDK v2 constructs a fresh `ServerSession` for every
+request**, so stamping it hands each tool call a brand-new state. Header
+access is guarded because `ctx.headers` is not always a mapping  - it is a
+plain `str` on v1 stdio and `None` on both v1 HTTP and v2 stdio.
+
+| | `ctx.headers` | `Mcp-Session-Id` | session object |
+|---|---|---|---|
+| v1 stdio | `str` | — | stable |
+| v1 HTTP | `None` | — | stable |
+| v2 stdio | `None` | — | per-request |
+| v2 HTTP | mapping | present, stable | per-request |
+
+### ASGI composition and lifespan
+
+In HTTP mode `main.py` mounts the MCP app and the dashboard under a single
+wrapper `Starlette`. Starlette dispatches lifespan events to the
+**top-level app only**, and the MCP SDK starts its session manager's anyio
+task group inside that lifespan  - so a mounted MCP app never starts, and
+every request fails with `RuntimeError: Task group is not initialized`.
+`_mounted_lifespan()` forwards each mounted app's `router.lifespan_context`
+through an `AsyncExitStack`. Note that `BearerAuthMiddleware` wraps the MCP
+app into a plain ASGI callable, hiding `.router`, so `main.py` keeps an
+unwrapped handle for the lifespan lookup.
 
 ---
 

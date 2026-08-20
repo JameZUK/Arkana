@@ -2,7 +2,7 @@
 
 Proposed enhancements and feature ideas for Arkana. Items are grouped by domain and prioritised within each section. Each proposal includes a value assessment to help determine whether the added complexity justifies the benefit over manual analysis.
 
-**Current state:** 294 MCP tools across 65 files, supporting PE/ELF/Mach-O with angr, capa, FLOSS, YARA, Binary Refinery, Qiling, and Speakeasy integrations.
+**Current state:** 308 MCP tools across 67 files, supporting PE/ELF/Mach-O with angr, capa, FLOSS, YARA, Binary Refinery, Qiling, and Speakeasy integrations.
 
 **Evaluation criteria for each proposal:**
 - **Value** — Does this enable analysis that's currently impossible, or just faster?

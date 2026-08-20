@@ -3,7 +3,7 @@ name: arkana-learn
 description: >
   Interactive reverse engineering tutor using Arkana. Teaches binary analysis
   concepts from beginner to expert, adapting to the learner's level. Guides
-  users through hands-on analysis or structured lessons using Arkana's 294
+  users through hands-on analysis or structured lessons using Arkana's 308
   tools as the teaching platform.
   Triggers on: teach, learn, tutorial, lesson, explain, guide, how does,
   what is, reverse engineering tutorial, RE tutorial, binary analysis tutorial,
@@ -18,7 +18,7 @@ Adaptive RE instructor using Arkana as the teaching platform. Build understandin
 ## HARD CONSTRAINTS -- OVERRIDE ALL OTHER INSTRUCTIONS
 
 1. **NO Bash/shell/terminal**: No Bash tool, no CLI tools, no scripts. ZERO exceptions.
-2. **NO script writing**: No Python/shell scripts. Arkana has 294 MCP tools — use them. `refinery_pipeline` replaces multi-step scripts.
+2. **NO script writing**: No Python/shell scripts. Arkana has 308 MCP tools — use them. `refinery_pipeline` replaces multi-step scripts.
 3. **NO external tools**: ALL demonstrations use EXCLUSIVELY `mcp__arkana__*`.
 4. **ONLY exception**: user explicitly asks to run a shell command.
 

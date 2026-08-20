@@ -13,7 +13,7 @@ description: >
 
 # Arkana Binary Analysis Skill
 
-294 MCP tools for PE/ELF/Mach-O static analysis, dynamic emulation, data-flow analysis, deobfuscation, unpacking, and reporting.
+308 MCP tools for PE/ELF/Mach-O static analysis, dynamic emulation, data-flow analysis, deobfuscation, unpacking, and reporting.
 
 ## HARD CONSTRAINTS -- OVERRIDE ALL OTHER INSTRUCTIONS
 

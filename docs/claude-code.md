@@ -219,7 +219,7 @@ Arkana understands analytical intent, not just tool commands. Here are examples 
 
 ## Analysis Skill for Claude Code
 
-Arkana ships with an **analysis skill**  - a structured workflow that teaches Claude Code how to use Arkana's 294 tools methodically, rather than relying on the model to figure it out from tool descriptions alone.
+Arkana ships with an **analysis skill**  - a structured workflow that teaches Claude Code how to use Arkana's 308 tools methodically, rather than relying on the model to figure it out from tool descriptions alone.
 
 Without the skill, Claude Code can still call Arkana tools individually, but it won't follow a structured analysis methodology, may miss important steps, and won't know Arkana-specific patterns like session persistence, note-taking discipline, or unpacking cascades.
 
@@ -232,7 +232,7 @@ The skill provides Claude Code with:
 - **Evidence-first methodology**  - All findings must cite specific tool output. Indicators (VirusTotal detections, capa matches, YARA hits) are treated as leads to investigate, not conclusions. Extraction of C2 configs and decoded payloads includes the full chain of evidence (where the data was, what algorithm/key was used, how the key was obtained).
 - **Multi-file workflows**  - Guidance for dropper-payload relationships, DLL sideloading investigations, campaign sample comparison, and shellcode extraction from loaders, including cross-file reference discovery (searching strings and imports for companion filenames).
 - **Context management**  - Automatic note-taking after every decompilation, periodic digest calls to synthesise findings, and session persistence awareness.
-- **Comprehensive tool coverage**  - A complete reference for all 294 tools organised by use case, plus specialised guides for C2 config extraction, unpacking strategies, and safe online research methodology.
+- **Comprehensive tool coverage**  - A complete reference for all 308 tools organised by use case, plus specialised guides for C2 config extraction, unpacking strategies, and safe online research methodology.
 
 ### Installing the Skill
 
@@ -248,7 +248,7 @@ You should see:
 
 ```
 SKILL.md              # Core workflow  - phases, operating principles, goal detection
-tooling-reference.md  # Complete 294-tool catalog by use case
+tooling-reference.md  # Complete 308-tool catalog by use case
 config-extraction.md  # Config decoding patterns by malware family
 unpacking-guide.md    # Packer identification and unpacking pipelines
 online-research.md    # Safe online research and decoder translation
@@ -308,7 +308,7 @@ The skill runs autonomously through Phases 0-3 (environment discovery, identific
 | File | Purpose |
 |------|---------|
 | [`SKILL.md`](../.claude/skills/arkana-analyze/SKILL.md) | Core workflow orchestration  - operating principles, 8 analysis phases, goal detection, reporting format, multi-file workflows, context management |
-| [`tooling-reference.md`](../.claude/skills/arkana-analyze/tooling-reference.md) | Complete catalog of all 294 MCP tools organised by use case with brief descriptions and key parameters |
+| [`tooling-reference.md`](../.claude/skills/arkana-analyze/tooling-reference.md) | Complete catalog of all 308 MCP tools organised by use case with brief descriptions and key parameters |
 | [`config-extraction.md`](../.claude/skills/arkana-analyze/config-extraction.md) | Malware config storage patterns, family-specific extraction strategies (Agent Tesla, AsyncRAT, Cobalt Strike, Emotet, Remcos, AdaptixC2, etc.), generic unknown-family approach, validation checklist |
 | [`unpacking-guide.md`](../.claude/skills/arkana-analyze/unpacking-guide.md) | Packer identification indicators, 5-method unpacking cascade (auto → orchestrated → emulation-based → emulation analysis → manual OEP), special cases for multi-layer packing, .NET obfuscators, shellcode loaders |
 | [`online-research.md`](../.claude/skills/arkana-analyze/online-research.md) | When and how to research online, search query patterns, read-and-understand methodology, decoder operation → Arkana tool translation table, safety rules |

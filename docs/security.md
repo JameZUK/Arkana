@@ -29,6 +29,35 @@ docker run --rm -it -p 8082:8082 \
 
 If `--allowed-paths` is not set in HTTP mode, Arkana logs a warning at startup.
 
+### Arkana's own project storage
+
+`open_file` adopts every binary into the active project's `binaries/` directory
+(`~/.arkana/projects/{id}/binaries/`) and rewrites the internal file path to that
+copy. `--allowed-paths` normally points at your samples directory, not at
+`~/.arkana`, so the allowlist also accepts two directories belonging to the
+**active** project:
+
+| Location | Why |
+|---|---|
+| `~/.arkana/projects/{active}/binaries/` | Where `open_file` puts the sample; tools that re-read their own loaded file resolve here |
+| `~/.arkana/projects/{active}/artifacts/` | Where tool output (unpacked payloads, dumps) is adopted |
+
+Files reach those directories only by Arkana copying an input you already
+authorised, so this grants no reach a caller did not already have. The scope is
+deliberately tight:
+
+- **Active project only.** The allowlist is per-session state. Permitting the
+  whole `projects/` tree would let one session read a binary another session had
+  adopted, simply by guessing the path.
+- **`binaries/` and `artifacts/` only**  - not the project root. `overlay/` and
+  `manifest.json` hold your notes and triage flags rather than sample data, and
+  no tool reads them by path.
+- **Symlinks cannot tunnel out.** Candidate paths are resolved with `realpath`
+  before comparison, so a symlink planted inside `binaries/` is judged by its
+  target and rejected if that target sits outside the allowed set.
+- **Nothing is granted** when no project is bound, or when the active project is
+  an unpromoted in-memory scratch project.
+
 ---
 
 ## Other Security Measures
@@ -85,8 +114,8 @@ Arkana applies defence-in-depth input validation across all layers:
 
 Arkana has two layers of testing, with automated CI via **GitHub Actions**:
 
-- **Unit tests** (`tests/`)  - 2853 fast tests covering core modules (utils, cache, state, hashing, parsers, MCP helpers), plus parametrised edge-case tests, concurrency tests for session isolation, and ResettableLock/partial CFG tests. No server or binary samples required. Run in ~13 seconds.
-- **Integration tests** (`mcp_test_client.py`)  - End-to-end tests for all 294 MCP tools against a running server, organised into 19 test categories with pytest markers.
+- **Unit tests** (`tests/`)  - 3125 fast tests covering core modules (utils, cache, state, hashing, parsers, MCP helpers), plus parametrised edge-case tests, concurrency tests for session isolation, and ResettableLock/partial CFG tests. No server or binary samples required. Run in ~13 seconds.
+- **Integration tests** (`mcp_test_client.py`)  - End-to-end tests for all 308 MCP tools against a running server, organised into 19 test categories with pytest markers.
 - **CI/CD** (`.github/workflows/ci.yml`)  - Automated unit tests on Python 3.10/3.11/3.12, coverage enforcement (65% floor with branch coverage), and syntax checking on every push, PR, and manual dispatch. Dependabot monitors pip dependencies weekly.
 
 ```bash

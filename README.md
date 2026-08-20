@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/JameZUK/Arkana/actions/workflows/ci.yml/badge.svg)](https://github.com/JameZUK/Arkana/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-294-purple.svg)](docs/tools-reference.md)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-308-purple.svg)](docs/tools-reference.md)
 [![GitHub stars](https://img.shields.io/github/stars/JameZUK/Arkana?style=social)](https://github.com/JameZUK/Arkana)
 
 > *"Analyse asyncrat.exe and tell me what it does"*
@@ -23,7 +23,7 @@ Arkana starts an interactive debug session, sets breakpoints on `VirtualAlloc` a
 
 ![Arkana analysing AsyncRAT](docs/demos/demo-asyncrat.gif)
 
-Arkana is a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that gives **Claude Code** (or any MCP client) **294 analysis tools** -- decompilation, symbolic execution, interactive step-through debugging, data-flow analysis, YARA/capa/FLOSS signatures, Binary Refinery data transforms, Qiling/Speakeasy emulation, .NET deobfuscation, function similarity matching, and a real-time web dashboard -- so you can investigate PE, ELF, Mach-O, .NET, Go, Rust, and shellcode samples by describing what you want to know. No Ghidra scripts, no CLI flags, no context-switching between a dozen tools. Just results.
+Arkana is a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that gives **Claude Code** (or any MCP client) **308 analysis tools** -- decompilation, symbolic execution, interactive step-through debugging, data-flow analysis, YARA/capa/FLOSS signatures, Binary Refinery data transforms, Qiling/Speakeasy emulation, .NET deobfuscation, function similarity matching, and a real-time web dashboard -- so you can investigate PE, ELF, Mach-O, .NET, Go, Rust, and shellcode samples by describing what you want to know. No Ghidra scripts, no CLI flags, no context-switching between a dozen tools. Just results.
 
 ---
 
@@ -31,11 +31,11 @@ Arkana is a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) ser
 
 **The problem:** Malware analysis means juggling Ghidra, IDA, CyberChef, YARA, and a dozen other tools -- each with its own interface, scripting language, and learning curve. Investigating a single sample might mean switching between 5-10 tools, manually correlating findings across disconnected workflows.
 
-Arkana eliminates this by putting **294 specialised analysis tools behind a single AI-driven interface** -- the equivalent of an entire malware lab in one MCP server. Describe what you want to know in natural language and the AI orchestrates the right tools automatically.
+Arkana eliminates this by putting **308 specialised analysis tools behind a single AI-driven interface** -- the equivalent of an entire malware lab in one MCP server. Describe what you want to know in natural language and the AI orchestrates the right tools automatically.
 
 **What makes it different:**
 
-- **Breadth** -- 294 tools spanning PE/ELF/Mach-O parsing, angr-powered decompilation and symbolic execution, Binary Refinery's 200+ composable data transforms, YARA/capa/FLOSS/PEiD signature engines, Qiling/Speakeasy emulation, .NET/Go/Rust specialised analysis, .NET deobfuscation and C# decompilation, Frida script generation, vulnerability pattern detection, cross-binary function similarity search, and VirusTotal integration.
+- **Breadth** -- 308 tools spanning PE/ELF/Mach-O parsing, angr-powered decompilation and symbolic execution, Binary Refinery's 200+ composable data transforms, YARA/capa/FLOSS/PEiD signature engines, Qiling/Speakeasy emulation, .NET/Go/Rust specialised analysis, .NET deobfuscation and C# decompilation, Frida script generation, vulnerability pattern detection, cross-binary function similarity search, and VirusTotal integration.
 - **AI reasoning over results** -- Unlike tools that just produce output, Arkana feeds results back to an AI that can reason about them. When it decompiles a function and sees `VirtualAlloc` followed by `memcpy` and an indirect call, it recognises the shellcode injection pattern, renames the function to `inject_shellcode`, and suggests investigating the source buffer.
 - **Zero-config auto-enrichment** -- Open a file and Arkana immediately begins background classification, risk scoring, MITRE ATT&CK mapping, IOC extraction, library identification, and a decompilation sweep. By the time you ask your first question, the answers are already cached.
 - **Interactive debugging** -- Step through binaries instruction-by-instruction with breakpoints, watchpoints, memory inspection, execution snapshots, API call tracing, I/O capture, and custom API stubs. Explore alternative execution paths by snapshotting state, modifying registers or memory, and comparing outcomes.
@@ -137,7 +137,7 @@ Every report below was generated from a single prompt: *"Analyse this binary and
 
 ## How Analysis Works
 
-Arkana follows a structured, evidence-first methodology -- the same phased workflow a professional malware analyst uses, orchestrated automatically across 294 tools. Every claim cites specific tool output, indicators are treated as leads (not conclusions), and the AI cannot attempt decryption without first decompiling the function that performs it.
+Arkana follows a structured, evidence-first methodology -- the same phased workflow a professional malware analyst uses, orchestrated automatically across 308 tools. Every claim cites specific tool output, indicators are treated as leads (not conclusions), and the AI cannot attempt decryption without first decompiling the function that performs it.
 
 **[Read the full methodology with annotated AsyncRAT walkthrough →](docs/methodology.md)**
 
@@ -204,7 +204,7 @@ For other MCP clients, local Python installation, and detailed configuration, se
 | **[Analysis Methodology](docs/methodology.md)** | Eight-phase analysis pipeline, tool-by-tool walkthrough, decision logic, built-in guardrails, annotated AsyncRAT example |
 | **[Claude Code Integration](docs/claude-code.md)** | Setup via CLI and JSON config; analysis and learning skills; typical workflows and example queries |
 | **[Configuration](docs/configuration.md)** | API keys, analysis cache, and command-line options |
-| **[Tools Reference](docs/tools-reference.md)** | Complete catalog of all 294 MCP tools organised by category |
+| **[Tools Reference](docs/tools-reference.md)** | Complete catalog of all 308 MCP tools organised by category |
 | **[VM-Protected Binaries](docs/vm-protected-binaries.md)** | Analysing VMProtect/Themida/Enigma binaries with Frida DBI scripts; four-stage pipeline |
 | **[Scenarios & Comparisons](docs/examples/scenarios.md)** | Seven real-world analysis walkthroughs; Arkana vs Ghidra, IDA Pro, CyberChef |
 | **[Architecture](docs/architecture.md)** | Package structure, design principles, pagination and result limits |
