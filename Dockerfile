@@ -223,10 +223,33 @@ RUN mkdir -p /app/dotnet-tools/netreactorslayer && { \
 
 # ilspycmd — install as .NET global tool
 # Optional: install failure is non-fatal (tool reports clear error at runtime)
-RUN dotnet tool install --tool-path /app/dotnet-tools/ilspy ilspycmd; \
+#
+# The version is pinned deliberately. Resolving "latest" picks a release
+# targeting a framework newer than this image's .NET 8 SDK, which fails at
+# install time with:
+#   The settings file in the tool's NuGet package is invalid:
+#   Settings file 'DotnetToolSettings.xml' was not found in the package.
+# Older 8.x releases install cleanly but target a runtime this image does not
+# ship, so they fail at *run* time instead ("You must install or update .NET
+# to run this application"). That second mode is the dangerous one:
+# _check_ilspycmd_available() in arkana/imports.py only tests that the file
+# exists, so a non-running binary would be advertised as available and every
+# dotnet_decompile() call would fail at runtime.
+#
+# 9.1.0.7988 is the newest release that both installs on the .NET 8 SDK and
+# runs on the .NET 8 runtime. Revisit when the dotnet base image is upgraded.
+# The post-install --version call is the guard: if the tool cannot execute,
+# the directory is removed so detection correctly reports it as missing.
+ARG ILSPYCMD_VERSION=9.1.0.7988
+RUN dotnet tool install --tool-path /app/dotnet-tools/ilspy ilspycmd \
+        --version "${ILSPYCMD_VERSION}" \
+    && /app/dotnet-tools/ilspy/ilspycmd --version > /dev/null 2>&1; \
     exit_code=$?; \
     if [ $exit_code -ne 0 ]; then \
-        echo "WARNING: ilspycmd install failed (exit $exit_code) — dotnet_decompile() will be unavailable"; \
+        rm -rf /app/dotnet-tools/ilspy; \
+        echo "WARNING: ilspycmd ${ILSPYCMD_VERSION} install/verify failed (exit $exit_code) — dotnet_decompile() will be unavailable"; \
+    else \
+        echo "  ilspycmd ${ILSPYCMD_VERSION} installed and verified"; \
     fi
 ENV PATH="${PATH}:/app/dotnet-tools/ilspy"
 
