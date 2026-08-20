@@ -448,12 +448,17 @@ RUN useradd -m -s /bin/bash -g arkana arkana && \
     chown -R arkana:arkana /output && \
     chown -R arkana:arkana /home/arkana
 
-# --- Healthcheck for HTTP mode ---
-# Only meaningful when running with --mcp-transport streamable-http.
-# In stdio mode the port isn't open, so the check will fail (container
-# still runs, Docker just marks it "unhealthy" — harmless).
+# --- Healthcheck ---
+# See scripts/docker_healthcheck.py for the full rationale. In short:
+# any HTTP response means the server is alive, because /mcp is behind
+# bearer auth (HTTP transport always has a key — one is auto-generated
+# when --api-key is omitted) so an unauthenticated probe gets 401, and
+# in stdio mode the dashboard owns the port and returns 404. The old
+# inline urlopen() treated both as failures, so every container sat
+# "unhealthy" for its entire life. Configurations that serve no HTTP at
+# all (stdio + --no-dashboard) report healthy rather than flapping red.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8082/mcp')"]
+    CMD ["python", "/app/scripts/docker_healthcheck.py"]
 
 USER arkana
 

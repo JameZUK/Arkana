@@ -181,6 +181,8 @@ A "project" is a named multi-binary investigation container backed by `~/.arkana
 
 ## Docker
 
+**Healthcheck**: `scripts/docker_healthcheck.py` (wired via `HEALTHCHECK`). Any HTTP response counts as alive — `/mcp` is behind bearer auth and HTTP transport **always** has a key (auto-generated when `--api-key` is omitted), so an unauthenticated probe gets 401; in stdio mode the dashboard owns the port and has no `/mcp` route, so it gets 404. The previous inline `urlopen()` treated both as failures, leaving every container permanently `unhealthy`. Configurations that serve no HTTP at all (stdio + `--no-dashboard`, or `ARKANA_DASHBOARD_PORT=0`) report healthy rather than flapping red; a connection failure when a listener *is* expected still reports unhealthy. Port and transport are read from `/proc/1/cmdline` so a non-default `--mcp-port` is probed correctly.
+
 ```bash
 ./run.sh --stdio          # stdio mode (for Claude Code)
 ./run.sh                  # HTTP mode (port 8082)
