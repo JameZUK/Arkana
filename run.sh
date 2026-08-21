@@ -51,7 +51,7 @@ if [[ -z "$RUNTIME" ]]; then
     exit 1
 fi
 
-echo "[*] Using container runtime: $RUNTIME"
+echo "[*] Using container runtime: $RUNTIME" >&2
 
 # --- SELinux: add :z to bind mounts so the container can read/write files ---
 SELINUX_SUFFIX=""
@@ -167,15 +167,31 @@ cmd_stdio() {
     echo "[*] Starting Arkana in stdio MCP mode..." >&2
     echo "[*] Samples mounted at: $CONTAINER_SAMPLES (from $SAMPLES_DIR)" >&2
     echo "[*] Config/cache (.arkana): $CACHE_DIR" >&2
-    echo "[*] Dashboard will be available at: http://127.0.0.1:$CONTAINER_PORT/dashboard/" >&2
+
+    # Publish the dashboard port only if it is actually free. Publishing it
+    # unconditionally makes a second instance die with "address already in use"
+    # (docker exit 125), which an MCP client surfaces as CONNECTION_CLOSED.
+    local port_args=()
+    if (exec 3<>"/dev/tcp/127.0.0.1/$CONTAINER_PORT") 2>/dev/null; then
+        exec 3>&- 2>/dev/null || true
+        echo "[*] Port $CONTAINER_PORT already in use - starting without the dashboard port." >&2
+    else
+        port_args=(-p "$CONTAINER_PORT:8082")
+        echo "[*] Dashboard will be available at: http://127.0.0.1:$CONTAINER_PORT/dashboard/" >&2
+    fi
+
+    # In stdio mode stdout IS the JSON-RPC channel. Third-party libraries print
+    # banners to stdout at import time (e.g. XLMMacroDeobfuscator, pulled in by
+    # oletools), which corrupts the stream for a strict MCP client. MCP stdio is
+    # newline-delimited JSON, so pass through only lines that are JSON objects.
     $RUNTIME run -i \
         "${COMMON_ARGS[@]}" \
         -e ARKANA_DASHBOARD_HOST=0.0.0.0 \
-        -p "$CONTAINER_PORT:8082" \
+        "${port_args[@]}" \
         "$IMAGE_NAME" \
         --mcp-server \
         --samples-path "$CONTAINER_SAMPLES" \
-        "$@"
+        "$@" | grep --line-buffered '^{'
 }
 
 cmd_analyze() {
