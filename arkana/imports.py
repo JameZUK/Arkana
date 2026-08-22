@@ -10,6 +10,7 @@ import sys
 import logging
 import shutil
 import threading
+import contextlib
 
 __all__ = [
     # Availability flags
@@ -67,6 +68,18 @@ from arkana.user_config import get_config_value
 import networkx as nx  # noqa: F401
 
 logger = logging.getLogger("Arkana")
+
+
+def _quiet_stdout():
+    """Redirect stdout to stderr for the duration of an import.
+
+    In stdio MCP mode stdout *is* the JSON-RPC channel, so a library that
+    prints a banner at import time corrupts the stream before the server
+    has written a single byte and a strict client drops the connection.
+    Wrap any third-party import known to print at import time.
+    """
+    return contextlib.redirect_stdout(sys.stderr)
+
 
 # --- Data directory ---
 DATA_DIR = Path(os.getenv("ARKANA_DATA_DIR") or os.getenv("PEMCP_DATA_DIR", Path(__file__).resolve().parent.parent))
@@ -662,8 +675,11 @@ except ImportError:
 
 OLETOOLS_AVAILABLE = False
 try:
-    import oletools.olevba  # noqa: F401
-    import oletools.oleid  # noqa: F401
+    # olevba pulls in XLMMacroDeobfuscator, which prints a "pywin32 is not
+    # installed" banner to stdout at import time.
+    with _quiet_stdout():
+        import oletools.olevba  # noqa: F401
+        import oletools.oleid  # noqa: F401
     OLETOOLS_AVAILABLE = True
 except ImportError:
     pass
