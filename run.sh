@@ -18,6 +18,7 @@ set -euo pipefail
 
 IMAGE_NAME="arkana-toolkit"
 CONTAINER_PORT="${ARKANA_PORT:-${PEMCP_PORT:-8082}}"
+DASHBOARD_PORT_SCAN="${ARKANA_DASHBOARD_PORT_SCAN:-10}"
 SAMPLES_DIR="${ARKANA_SAMPLES:-${PEMCP_SAMPLES:-$(cd "$(dirname "$0")" && pwd)/samples}}"
 CONTAINER_SAMPLES="/$(basename "$SAMPLES_DIR")"
 ROOTFS_DIR="${ARKANA_ROOTFS:-${PEMCP_ROOTFS:-$(cd "$(dirname "$0")" && pwd)/qiling-rootfs}}"
@@ -43,11 +44,11 @@ detect_runtime() {
 RUNTIME=$(detect_runtime)
 
 if [[ -z "$RUNTIME" ]]; then
-    echo "Error: Neither Docker nor Podman found (or Docker daemon not running)."
-    echo ""
-    echo "Install one of:"
-    echo "  Docker:  https://docs.docker.com/get-docker/"
-    echo "  Podman:  https://podman.io/getting-started/installation"
+    echo "Error: Neither Docker nor Podman found (or Docker daemon not running)." >&2
+    echo "" >&2
+    echo "Install one of:" >&2
+    echo "  Docker:  https://docs.docker.com/get-docker/" >&2
+    echo "  Podman:  https://podman.io/getting-started/installation" >&2
     exit 1
 fi
 
@@ -62,15 +63,15 @@ fi
 # --- Build image if it doesn't exist ---
 ensure_image() {
     if ! $RUNTIME image inspect "$IMAGE_NAME" &>/dev/null; then
-        echo "[*] Image '$IMAGE_NAME' not found. Building..."
+        echo "[*] Image '$IMAGE_NAME' not found. Building..." >&2
         build_image
     fi
 }
 
 build_image() {
-    echo "[*] Building $IMAGE_NAME..."
-    $RUNTIME build -t "$IMAGE_NAME" "$(dirname "$0")"
-    echo "[*] Build complete."
+    echo "[*] Building $IMAGE_NAME..." >&2
+    $RUNTIME build -t "$IMAGE_NAME" "$(dirname "$0")" >&2
+    echo "[*] Build complete." >&2
 }
 
 # --- Common run arguments ---
@@ -168,16 +169,36 @@ cmd_stdio() {
     echo "[*] Samples mounted at: $CONTAINER_SAMPLES (from $SAMPLES_DIR)" >&2
     echo "[*] Config/cache (.arkana): $CACHE_DIR" >&2
 
-    # Publish the dashboard port only if it is actually free. Publishing it
-    # unconditionally makes a second instance die with "address already in use"
-    # (docker exit 125), which an MCP client surfaces as CONNECTION_CLOSED.
+    # Publish the dashboard on the first free host port. Publishing
+    # $CONTAINER_PORT unconditionally makes a second instance die with "address
+    # already in use" (docker exit 125), which an MCP client surfaces as
+    # CONNECTION_CLOSED. But simply skipping the publish when the port is busy
+    # is worse in practice: the check is a single sample taken at spawn time,
+    # and the busy window is usually the previous instance shutting down. The
+    # dashboard would then stay unreachable for the entire life of the session
+    # (hours), with the only notice on stderr where MCP clients bury it.
+    # Walking to the next free port keeps every instance reachable.
     local port_args=()
-    if (exec 3<>"/dev/tcp/127.0.0.1/$CONTAINER_PORT") 2>/dev/null; then
-        exec 3>&- 2>/dev/null || true
-        echo "[*] Port $CONTAINER_PORT already in use - starting without the dashboard port." >&2
+    local host_port=""
+    local candidate
+    for candidate in $(seq "$CONTAINER_PORT" $((CONTAINER_PORT + DASHBOARD_PORT_SCAN - 1))); do
+        if (exec 3<>"/dev/tcp/127.0.0.1/$candidate") 2>/dev/null; then
+            continue  # connect succeeded => something is listening
+        fi
+        host_port="$candidate"
+        break
+    done
+
+    if [[ -n "$host_port" ]]; then
+        port_args=(-p "$host_port:8082")
+        if [[ "$host_port" != "$CONTAINER_PORT" ]]; then
+            echo "[*] Port $CONTAINER_PORT is in use - using $host_port for the dashboard." >&2
+        fi
+        echo "[*] Dashboard will be available at: http://127.0.0.1:$host_port/dashboard/" >&2
+        echo "[*] (the server logs the ?token=... URL to stderr on startup)" >&2
     else
-        port_args=(-p "$CONTAINER_PORT:8082")
-        echo "[*] Dashboard will be available at: http://127.0.0.1:$CONTAINER_PORT/dashboard/" >&2
+        echo "[*] Ports $CONTAINER_PORT-$((CONTAINER_PORT + DASHBOARD_PORT_SCAN - 1)) all in use -" \
+             "starting without the dashboard port." >&2
     fi
 
     # In stdio mode stdout IS the JSON-RPC channel. Third-party libraries print
@@ -265,7 +286,10 @@ Options:
 
 Environment variables:
   VT_API_KEY        VirusTotal API key (passed into container)
-  ARKANA_PORT       Host port for HTTP mode (default: 8082)
+  ARKANA_PORT       Host port for HTTP mode / first dashboard port in stdio mode (default: 8082)
+  ARKANA_DASHBOARD_PORT_SCAN
+                    How many consecutive ports stdio mode tries for the dashboard
+                    when ARKANA_PORT is busy (default: 10)
   ARKANA_SAMPLES    Default samples directory (overridden by --samples)
   ARKANA_OUTPUT     Default output directory (overridden by --output)
   ARKANA_CACHE      Default cache/config directory (overridden by --cache)
