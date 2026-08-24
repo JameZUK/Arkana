@@ -19,6 +19,7 @@ set -euo pipefail
 IMAGE_NAME="arkana-toolkit"
 CONTAINER_PORT="${ARKANA_PORT:-${PEMCP_PORT:-8082}}"
 DASHBOARD_PORT_SCAN="${ARKANA_DASHBOARD_PORT_SCAN:-10}"
+DASHBOARD_PORT_WAIT="${ARKANA_DASHBOARD_PORT_WAIT:-8}"
 SAMPLES_DIR="${ARKANA_SAMPLES:-${PEMCP_SAMPLES:-$(cd "$(dirname "$0")" && pwd)/samples}}"
 CONTAINER_SAMPLES="/$(basename "$SAMPLES_DIR")"
 ROOTFS_DIR="${ARKANA_ROOTFS:-${PEMCP_ROOTFS:-$(cd "$(dirname "$0")" && pwd)/qiling-rootfs}}"
@@ -53,6 +54,29 @@ if [[ -z "$RUNTIME" ]]; then
 fi
 
 echo "[*] Using container runtime: $RUNTIME" >&2
+
+# --- Port probe -------------------------------------------------------------
+# Returns 0 when the port is in use, 1 when it is free.
+#
+# The connect is time-bounded. A listener whose accept backlog is full stops
+# answering SYNs; a bare /dev/tcp probe then blocks for tens of seconds and
+# finally reports the port FREE -- which would send the container at an
+# occupied port and fail the start with docker exit 125. A connect that times
+# out means something IS bound there, so it counts as in use.
+_TIMEOUT_CMD=""
+if command -v timeout &>/dev/null; then
+    _TIMEOUT_CMD="timeout"
+fi
+
+port_in_use() {
+    local port="$1" rc=0
+    if [[ -n "$_TIMEOUT_CMD" ]]; then
+        "$_TIMEOUT_CMD" 1 bash -c "exec 3<>/dev/tcp/127.0.0.1/$port" 2>/dev/null || rc=$?
+        (( rc == 0 || rc == 124 ))
+    else
+        (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null
+    fi
+}
 
 # --- SELinux: add :z to bind mounts so the container can read/write files ---
 SELINUX_SUFFIX=""
@@ -178,12 +202,33 @@ cmd_stdio() {
     # dashboard would then stay unreachable for the entire life of the session
     # (hours), with the only notice on stderr where MCP clients bury it.
     # Walking to the next free port keeps every instance reachable.
+    #
+    # Wait briefly for the preferred port before falling back. An MCP client
+    # restart overlaps two servers -- the replacement is spawned a few seconds
+    # before the outgoing one is torn down -- so $CONTAINER_PORT is transiently
+    # held by a dying sibling. Stepping straight past it makes the survivor (the
+    # later spawn) land on the next port on *every* restart, while
+    # $CONTAINER_PORT frees up moments later. Measured overlap: ~2-5s.
     local port_args=()
     local host_port=""
     local candidate
+    local waited_ds=0
+    local max_ds=$(( ${DASHBOARD_PORT_WAIT%%.*} * 10 ))
+    while port_in_use "$CONTAINER_PORT"; do
+        if (( waited_ds >= max_ds )); then
+            break
+        fi
+        if (( waited_ds == 0 )); then
+            echo "[*] Port $CONTAINER_PORT busy (likely the outgoing instance) -" \
+                 "waiting up to ${DASHBOARD_PORT_WAIT}s for it..." >&2
+        fi
+        sleep 1
+        waited_ds=$(( waited_ds + 10 ))
+    done
+
     for candidate in $(seq "$CONTAINER_PORT" $((CONTAINER_PORT + DASHBOARD_PORT_SCAN - 1))); do
-        if (exec 3<>"/dev/tcp/127.0.0.1/$candidate") 2>/dev/null; then
-            continue  # connect succeeded => something is listening
+        if port_in_use "$candidate"; then
+            continue
         fi
         host_port="$candidate"
         break
