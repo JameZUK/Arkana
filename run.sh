@@ -201,10 +201,25 @@ cmd_stdio() {
              "starting without the dashboard port." >&2
     fi
 
-    # In stdio mode stdout IS the JSON-RPC channel. Third-party libraries print
-    # banners to stdout at import time (e.g. XLMMacroDeobfuscator, pulled in by
-    # oletools), which corrupts the stream for a strict MCP client. MCP stdio is
-    # newline-delimited JSON, so pass through only lines that are JSON objects.
+    # In stdio mode stdout IS the JSON-RPC channel. Third-party libraries can
+    # print banners to stdout at import time (XLMMacroDeobfuscator, pulled in by
+    # oletools, did until 0293f0f fixed it at the source), which corrupts the
+    # stream for a strict MCP client. MCP stdio is newline-delimited JSON, so
+    # pass through only lines that are JSON objects.
+    #
+    # Anything dropped is forwarded to stderr rather than swallowed: this filter
+    # is defence-in-depth against a future dependency reintroducing the problem,
+    # and a filter that silently eats output would turn a stray print() from
+    # Arkana itself into an invisible bug. awk also always exits 0, unlike grep
+    # which exits 1 when nothing matches -- under `set -o pipefail` that masked
+    # the container's real exit code (e.g. docker's 125) behind a bare 1.
+    local json_filter='
+        /^\{/ { print; fflush(); next }
+        {
+            print "[run.sh] dropped non-JSON stdout: " $0 > "/dev/stderr"
+            fflush("/dev/stderr")
+        }
+    '
     $RUNTIME run -i \
         "${COMMON_ARGS[@]}" \
         -e ARKANA_DASHBOARD_HOST=0.0.0.0 \
@@ -212,7 +227,7 @@ cmd_stdio() {
         "$IMAGE_NAME" \
         --mcp-server \
         --samples-path "$CONTAINER_SAMPLES" \
-        "$@" | grep --line-buffered '^{'
+        "$@" | awk "$json_filter"
 }
 
 cmd_analyze() {
