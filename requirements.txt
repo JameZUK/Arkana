@@ -29,7 +29,7 @@ flare-capa>=9.3,<9.5
 
 # --- String Analysis & Ranking ---
 # PyPI package name is "stringsifter", NOT "flare-stringsifter"
-stringsifter>=3.0
+stringsifter>=3.20230711
 joblib>=1.2
 numpy>=1.24
 rapidfuzz>=3.0
