@@ -88,7 +88,7 @@ py-tlsh>=4.7
 
 # --- .NET Binary Analysis (Optional) ---
 # .NET PE metadata parser (CLR headers, metadata tables, streams)
-dnfile>=0.15
+dnfile>=0.18.0
 # .NET CIL bytecode disassembler (Mandiant FLARE)
 dncil>=1.0
 
