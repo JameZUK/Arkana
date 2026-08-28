@@ -41,7 +41,7 @@ PyYAML>=6.0
 # --- Signatures, Cryptography & Scanning ---
 yara-python>=4.3
 signify>=0.7
-cryptography>=43.0
+cryptography>=46.0.7
 
 # --- Network & API (VirusTotal/Updates) ---
 requests>=2.28
